@@ -8,7 +8,7 @@ from gym.utils import seeding
 from .rendering import *
 
 # Size in pixels of a tile in the full-scale human view
-TILE_PIXELS = 32
+TILE_PIXELS = 16
 
 # Map of color names to RGB values
 COLORS = {
@@ -47,6 +47,10 @@ OBJECT_TO_IDX = {
     'goal'          : 8,
     'lava'          : 9,
     'agent'         : 10,
+    'colored_square': 11, 
+    'colored_circle': 12, 
+    'colored_triangle': 13, 
+    'colored_upside_down_triangle': 14, 
 }
 
 IDX_TO_OBJECT = dict(zip(OBJECT_TO_IDX.values(), OBJECT_TO_IDX.keys()))
@@ -142,6 +146,14 @@ class WorldObj:
             v = Goal()
         elif obj_type == 'lava':
             v = Lava()
+        elif obj_type == 'colored_rectangle':
+            v = ColoredSquare(color)
+        elif obj_type == 'colored_circle':
+            v = ColoredCircle(color)
+        elif obj_type == 'colored_triangle':
+            v = ColoredTriangle(color)
+        elif obj_type == 'colored_upside_down_triangle':
+            v = ColoredUpsideDownTriangle(color)
         else:
             assert False, "unknown object type in decode '%s'" % obj_type
 
@@ -160,7 +172,45 @@ class Goal(WorldObj):
 
     def render(self, img):
         fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
+        
+class ColoredShape(WorldObj):
+    def __init__(self, shape, color):
+        super().__init__('colored_'+shape, color)
+        self.shape = shape
+        
+    def render(self, img):
+        raise NotImplementedError('Use a subclass of ColoredShape')
+            
+class ColoredSquare(ColoredShape):
+    def __init__(self, color):
+        super().__init__('square', color)
+        
+    def render(self, img):
+        fill_coords(img, point_in_rect(0, 1, 0, 1), COLORS[self.color])
 
+class ColoredCircle(ColoredShape):
+    def __init__(self, color):
+        super().__init__('circle', color)
+        
+    def render(self, img):
+        fill_coords(img, point_in_circle(0.5, 0.5, 0.3), COLORS[self.color])
+
+class ColoredTriangle(ColoredShape):
+    def __init__(self, color):
+        super().__init__('triangle', color)
+        
+    def render(self, img):
+        fill_coords(img, point_in_triangle((0.0,0.0),(1.0,0.0),(0.5,1.0)), COLORS[self.color])
+            
+class ColoredUpsideDownTriangle(ColoredShape):
+    def __init__(self, color):
+        super().__init__('upside_down_triangle', color)
+        
+    def render(self, img):
+        tri_fn = point_in_triangle((0.0,0.0),(1.0,0.0),(0.5,1.0))
+        tri_fn = rotate_fn(tri_fn, cx=0.5, cy=0.5, theta=math.pi)
+        fill_coords(img, tri_fn, COLORS[self.color])
+            
 class Floor(WorldObj):
     """
     Colored floor tile the agent can walk over
