@@ -27,6 +27,8 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         self.observation_space = self.observation_space.spaces['image']
 
     def _gen_grid(self, width, height):
+        self.seed(0)
+        random.seed(0)
         # Create the grid
         self.grid = Grid(width, height)
 
@@ -46,7 +48,7 @@ class FourRoomsMemoryEnv(MiniGridEnv):
 
         pos = (room_w, self._rand_int(room_h+3, 2*room_h-3))
         self.grid.set(*pos, None)
-        pos = (2*room_w, self._rand_int(room_h+3, 2*room_h-13)
+        pos = (2*room_w, self._rand_int(room_h+3, 2*room_h-3))
         self.grid.set(*pos, None)
         pos = (self._rand_int(room_w+3, 2*room_w-3), room_h)
         self.grid.set(*pos, None)
@@ -72,7 +74,10 @@ class FourRoomsMemoryEnv(MiniGridEnv):
             self.shape_rooms = list(shape_types)
             random.shuffle(self.shape_rooms)
 
-        room_tops = [(room_w+1,1),(room_w*2+1,room_h+1),(room_w+1,room_h*2+1),(1,room_h+1)]
+        room_tops = [(room_w+2,2),
+                     (room_w*2+2,room_h+2),
+                     (room_w+2,room_h*2+2),
+                     (2,room_h+2)]
 
         for i in range(4):
             shape = self.shape_rooms[i]
@@ -85,7 +90,7 @@ class FourRoomsMemoryEnv(MiniGridEnv):
                         color = random.choice(shape_colors)
 
                 obj = create_shape(shape,color)
-                self.place_obj(obj,room_tops[i],(room_w-1,room_h-1))
+                self.place_obj(obj,room_tops[i],(room_w-4,room_h-4))
 
         self.mission = 'win'
 
