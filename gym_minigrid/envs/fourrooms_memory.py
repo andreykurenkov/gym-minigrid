@@ -3,6 +3,7 @@
 
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
+import numpy as np
 import random
 
 def create_shape(shape,color):
@@ -22,13 +23,11 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         self._goal_default_pos = goal_pos
         self._current_ep = 0
         self._randomization_freq = 10000000
-        self._num_room_objs = 3
+        self._num_room_objs = 2
         super().__init__(grid_size=30, max_steps=100)
         self.observation_space = self.observation_space.spaces['image']
 
     def _gen_grid(self, width, height):
-        self.seed(0)
-        random.seed(0)
         # Create the grid
         self.grid = Grid(width, height)
 
@@ -55,16 +54,6 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         pos = (self._rand_int(room_w+3, 2*room_w-3), 2*room_h)
         self.grid.set(*pos, None)
 
-        # Randomize the player start position and orientation
-        if self._agent_default_pos is not None:
-            self.agent_pos = self._agent_default_pos
-            self.grid.set(*self._agent_default_pos, None)
-            self.agent_dir = self._rand_int(0, 4)  # assuming random start direction
-        else:
-            pos = (self._rand_int(room_w+1, 2*room_w-1), self._rand_int(room_h+1, 2*room_h-1))
-            self.agent_pos = pos
-            self.agent_dir = self._rand_int(0, 4)
-
         shape_colors = ['red','green','blue','purple']
         shape_types = ['square','circle','triangle','upside_down_triangle']
 
@@ -73,6 +62,27 @@ class FourRoomsMemoryEnv(MiniGridEnv):
             self.goal_color = random.choice(shape_colors)
             self.shape_rooms = list(shape_types)
             random.shuffle(self.shape_rooms)
+
+        obj_placement = [(width//2, height//2 - 3),
+                     (width//2 + 3, height//2),
+                     (width//2, height//2 + 3),
+                     (width//2 - 3, height//2)]
+        for i in range(4):
+            shape = self.shape_rooms[i]
+            obj = create_shape(shape,'grey')
+            self.grid.set(*obj_placement[i], obj)
+
+        # Randomize the player start position and orientation
+        if self._agent_default_pos is not None:
+            self.agent_pos = self._agent_default_pos
+            self.grid.set(*self._agent_default_pos, None)
+            self.agent_dir = self._agent_default_dir#self._rand_int(0, 4)  # assuming random start direction
+        else:
+            #pos = (self._rand_int(room_w+1, 2*room_w-1), self._rand_int(room_h+1, 2*room_h-1))
+            #self._agent_default_pos = pos
+            self.agent_pos = (width//2,height//2)
+            self.agent_dir = self._rand_int(0, 4)
+            #self._agent_default_dir = self.agent_dir
 
         room_tops = [(room_w+2,2),
                      (room_w*2+2,room_h+2),
@@ -90,14 +100,16 @@ class FourRoomsMemoryEnv(MiniGridEnv):
                         color = random.choice(shape_colors)
 
                 obj = create_shape(shape,color)
-                self.place_obj(obj,room_tops[i],(room_w-4,room_h-4))
+                pos = self.place_obj(obj,room_tops[i],(room_w-4,room_h-4))
+                if shape==self.goal_shape and j==0:
+                    self.goal_pos = pos
 
         self.mission = 'win'
 
     def step(self, action):
         self.step_count += 1
 
-        reward = 0
+        reward = self._reward()
         done = False
 
         # Get the position in front of the agent
@@ -122,14 +134,13 @@ class FourRoomsMemoryEnv(MiniGridEnv):
                 self.agent_pos = fwd_pos
             if fwd_cell != None and fwd_cell.type == 'goal':
                 done = True
-                reward = self._reward()
             if fwd_cell != None and fwd_cell.type == 'lava':
                 done = True
             if fwd_cell != None and \
                 'colored' in fwd_cell.type and \
                 fwd_cell.shape == self.goal_shape and \
                 fwd_cell.color == self.goal_color:
-                reward = self._reward()
+                reward+=1
                 done = True
 
         # Pick up an object
@@ -166,6 +177,11 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         obs = obs['image']
 
         return obs, reward, done, {}
+
+    def _reward(self):
+        agent_pos = np.array(self.agent_pos)
+        goal_pos = np.array(self.goal_pos)
+        return -np.linalg.norm(goal_pos - agent_pos)/10.0
 
     def reset(self):
         obs = super().reset()
