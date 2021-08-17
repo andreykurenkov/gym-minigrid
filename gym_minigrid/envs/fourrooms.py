@@ -4,6 +4,7 @@
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
 from gym_minigrid.wrappers import ImgObsWrapper
+from gym_minigrid.wrappers import RGBImgPartialObsWrapper
 
 
 class FourRoomsEnv(MiniGridEnv):
@@ -86,4 +87,15 @@ def image_four_rooms():
 register(
     id='MiniGrid-FourRoomsImage-v0',
     entry_point='gym_minigrid.envs:image_four_rooms'
+)
+
+def rgb_image_four_rooms():
+    env = FourRoomsEnv()
+    env = RGBImgPartialObsWrapper(env)
+    env = ImgObsWrapper(env)
+    return env
+
+register(
+    id='MiniGrid-FourRoomsRGBImage-v0',
+    entry_point='gym_minigrid.envs:rgb_image_four_rooms'
 )
