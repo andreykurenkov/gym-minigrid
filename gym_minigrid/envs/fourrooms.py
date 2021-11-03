@@ -31,7 +31,8 @@ class FourRoomsEnv(MiniGridEnv):
         room_w = width // 2
         room_h = height // 2
 
-        # For each row of rooms
+        # For each row of roomsk
+        '''
         for j in range(0, 2):
 
             # For each column
@@ -52,7 +53,7 @@ class FourRoomsEnv(MiniGridEnv):
                     self.grid.horz_wall(xL, yB, room_w)
                     pos = (self._rand_int(xL + 1, xR), yB)
                     self.grid.set(*pos, None)
-
+       '''
         # Randomize the player start position and orientation
         if self._agent_default_pos is not None:
             self.agent_pos = self._agent_default_pos
@@ -80,7 +81,8 @@ register(
 )
 
 def image_four_rooms():
-    env = FourRoomsEnv()
+    env = FourRoomsEnv((4,4))
+    #env = FourRoomsEnv()
     env = ImgObsWrapper(env)
     return env
 
@@ -90,7 +92,7 @@ register(
 )
 
 def rgb_image_four_rooms():
-    env = FourRoomsEnv()
+    env = FourRoomsEnv((4,4),(16,16))
     env = RGBImgPartialObsWrapper(env)
     env = ImgObsWrapper(env)
     return env

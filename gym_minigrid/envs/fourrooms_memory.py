@@ -4,6 +4,7 @@
 from gym_minigrid.minigrid import *
 from gym_minigrid.register import register
 from gym_minigrid.wrappers import RGBImgPartialObsWrapper
+from gym_minigrid.wrappers import FrameStack
 from collections import deque
 from gym.spaces import Box
 from gym import Wrapper
@@ -22,18 +23,52 @@ def create_shape(shape,color):
 
 class FourRoomsMemoryEnv(MiniGridEnv):
 
-    def __init__(self, agent_pos=None, goal_pos=None):
+    def __init__(self,
+                 agent_pos=(7,7),
+                 goal_pos=None,
+                 random_seed=True,
+                 random_goal=True,
+                 random_rooms=False,
+                 random_agent_pos=False,
+                 room_walls=False,
+                 room_shape_hints=False,
+                 bits_actions=True,
+                 num_bits = 8):
         self._agent_default_pos = agent_pos
         self._goal_default_pos = goal_pos
         self._current_ep = 0
         self._randomization_freq = 25000000000
-        self._num_room_objs = 3
-        super().__init__(grid_size=30, max_steps=250)
-        self.observation_space = self.observation_space.spaces['image']
+        self._num_room_objs = 1
+        self._random_seed = random_seed
+        self._random_goal = random_goal
+        self._random_rooms = random_rooms
+        self._random_agent_pos = random_agent_pos
+        self._room_walls = room_walls
+        self._room_shape_hints = room_shape_hints
+        self._bits_actions = bits_actions
+        self._num_bits = num_bits
+        self.shape_colors = ['red','green','blue','purple']
+        self.shape_types = ['square','circle','triangle','upside_down_triangle']
+        super().__init__(grid_size=15, max_steps=100)
+        if bits_actions:
+            self.memory_observation_space = spaces.Box(
+                low=0,
+                high=255,
+                shape=(1,),
+                dtype='uint8'
+            )
+            self.observation_space.spaces['memory'] = self.memory_observation_space
+            self.bits = [False]*num_bits
+            self.action_space = spaces.Discrete(len(self.actions)+4)
+            self.bit_memory = 0
+        else:
+            self.observation_space = self.observation_space.spaces['image']
 
-    def _gen_grid(self, width, height):
-        #self.seed(0)
-        #random.seed(0)
+    def _gen_grid(self, width, height, reset = True):
+        if not self._random_seed:
+            self.seed(0)
+            random.seed(0)
+
         # Create the grid
         self.grid = Grid(width, height)
 
@@ -46,61 +81,75 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         room_w = width // 3
         room_h = height // 3
 
-        #self.grid.horz_wall(0, room_h)
-        #self.grid.horz_wall(0, 2*room_h)
-        #self.grid.vert_wall(room_w, 0)
-        #self.grid.vert_wall(room_w*2, 0)
+        if self._room_walls:
+            self.grid.horz_wall(0, room_h)
+            self.grid.horz_wall(0, 2*room_h)
+            self.grid.vert_wall(room_w, 0)
+            self.grid.vert_wall(room_w*2, 0)
 
-        #pos = (room_w, self._rand_int(room_h+3, 2*room_h-3))
-        #self.grid.set(*pos, None)
-        #pos = (2*room_w, self._rand_int(room_h+3, 2*room_h-3))
-        #self.grid.set(*pos, None)
-        #pos = (self._rand_int(room_w+3, 2*room_w-3), room_h)
-        #self.grid.set(*pos, None)
-        #pos = (self._rand_int(room_w+3, 2*room_w-3), 2*room_h)
-        #self.grid.set(*pos, None)
+            pos = (room_w, self._rand_int(room_h+3, 2*room_h-3))
+            self.grid.set(*pos, None)
+            pos = (2*room_w, self._rand_int(room_h+3, 2*room_h-3))
+            self.grid.set(*pos, None)
+            pos = (self._rand_int(room_w+3, 2*room_w-3), room_h)
+            self.grid.set(*pos, None)
+            pos = (self._rand_int(room_w+3, 2*room_w-3), 2*room_h)
+            self.grid.set(*pos, None)
 
         shape_colors = ['red','green','blue','purple']
         shape_types = ['square','circle','triangle','upside_down_triangle']
 
         if self._current_ep % self._randomization_freq == 0:
-            self.goal_shape = 'triangle'#random.choice(shape_types)
-            self.goal_color = 'purple'#random.choice(shape_colors)
-            #self.shape_rooms = list(shape_types)
-            self.shape_rooms = shape_types = ['square','circle','triangle','upside_down_triangle']
-            #random.shuffle(self.shape_rooms)
-        self.shape_rooms = list(shape_types)
-        random.shuffle(self.shape_rooms)
-        self.goal_shape = random.choice(shape_types)
-        self.goal_color = random.choice(shape_colors)
+            if self._random_goal:
+                self.goal_shape = random.choice(shape_types)
+                self.goal_color = random.choice(shape_colors)
+            else:
+                self.goal_shape = 'triangle'
+                self.goal_color = 'purple'
 
-        hint_placements = [(width//2, height//2 - 3),
+            if self._random_rooms:
+                self.shape_rooms = list(shape_types)
+                random.shuffle(self.shape_rooms)
+            else:
+                self.shape_rooms = shape_types = ['square','circle','triangle','upside_down_triangle']
+
+        if reset:
+            self.shape_rooms = list(shape_types)
+            random.shuffle(self.shape_rooms)
+            self.goal_shape = random.choice(shape_types)
+            self.goal_color = random.choice(shape_colors)
+
+        hint_placements = [(width//2, 1),#height//2 - 3),
                      (width//2 + 3, height//2),
                      (width//2, height//2 + 3),
                      (width//2 - 3, height//2)]
-        self.hint_placement = random.choice(hint_placements)
-        self.hint_obj = create_shape(self.goal_shape,self.goal_color)
-        self.grid.set(*self.hint_placement, self.hint_obj)
+        if self._random_goal:
+            self.hint_placement = hint_placements[0]
+            self.hint_obj = create_shape(self.goal_shape,self.goal_color)
+            self.grid.set(*self.hint_placement, self.hint_obj)
 
         obj_placement = [(width//2, height//2 - 3),
                      (width//2 + 3, height//2),
                      (width//2, height//2 + 3),
                      (width//2 - 3, height//2)]
 
-        #for i in range(4):
-        #    shape = self.shape_rooms[i]
-        #    obj = create_shape(shape,'grey')
-        #    self.grid.set(*obj_placement[i], obj)
+        if self._room_shape_hints:
+            for i in range(4):
+                shape = self.shape_rooms[i]
+                obj = create_shape(shape,'grey')
+                self.grid.set(*obj_placement[i], obj)
 
         # Randomize the player start position and orientation
         if self._agent_default_pos is not None:
             self.agent_pos = self._agent_default_pos
             self.grid.set(*self._agent_default_pos, None)
-            self.agent_dir = self._agent_default_dir#self._rand_int(0, 4)  # assuming random start direction
+            self.agent_dir = 3
         else:
-            #pos = (self._rand_int(room_w+1, 2*room_w-1), self._rand_int(room_h+1, 2*room_h-1))
-            #self._agent_default_pos = pos
-            self.agent_pos = (width//2,height//2)
+            if self._random_agent_pos:
+                pos = (self._rand_int(room_w+1, 2*room_w-1), self._rand_int(room_h+1, 2*room_h-1))
+                self._agent_default_pos = pos
+            else:
+                self.agent_pos = (width//2,height//2)
             self.agent_dir = self._rand_int(0, 4)
             #self._agent_default_dir = self.agent_dir
 
@@ -128,7 +177,6 @@ class FourRoomsMemoryEnv(MiniGridEnv):
 
     def step(self, action):
         self.step_count += 1
-
         done = False
         reward = 0
 
@@ -157,12 +205,15 @@ class FourRoomsMemoryEnv(MiniGridEnv):
             if fwd_cell != None and fwd_cell.type == 'lava':
                 done = True
             if fwd_cell != None and \
-                'colored' in fwd_cell.type and \
-                fwd_cell.shape == self.goal_shape and \
+               'colored' in fwd_cell.type:
+                if fwd_cell.shape == self.goal_shape and \
                 fwd_cell.color == self.goal_color and \
                 fwd_cell!=self.hint_obj:
-                reward = 1#self._reward()
-                done = True
+                    reward = 5#self._reward()
+                    #self._gen_grid(30, 30, False)
+                    done = True
+                else:
+                    reward = -5
 
         # Pick up an object
         elif action == self.actions.pickup:
@@ -188,6 +239,13 @@ class FourRoomsMemoryEnv(MiniGridEnv):
         elif action == self.actions.done:
             pass
 
+        elif action >= 7:
+            if not self.bits[action-7]:
+                self.bit_memory+= 2**(action-7)
+            else:
+                self.bit_memory-= 2**(action-7)
+            self.bits[action-7] = not self.bits[action-7]
+
         else:
             assert False, "unknown action"
 
@@ -195,20 +253,50 @@ class FourRoomsMemoryEnv(MiniGridEnv):
             done = True
 
         reward+= self._reward()
+        if action > 2 and action < 7:
+            reward-= 0.1
+        '''
+        elif action >= 7 and action < 11:
+            shape_index = self.shape_types.index(self.goal_shape)
+            if action-7 == shape_index:
+                if self.bits[shape_index]:
+                    reward+=0.5
+                else:
+                    reward-=0.5
+            else:
+                reward-=0.05
+
+        elif action >=11:
+            color_index = self.shape_colors.index(self.goal_color)
+            if action-11 == color_index:
+                if self.bits[color_index+4]:
+                    reward+=0.5
+                else:
+                    reward-=0.5
+            else:
+                reward-=0.05
+        '''
         obs = self.gen_obs()
-        obs = obs['image']
+        obs['memory'] = [int(x) for x in self.bits]
+        #obs = obs['image']
 
         return obs, reward, done, {}
 
     def _reward(self):
         agent_pos = np.array(self.agent_pos)
         goal_pos = np.array(self.goal_pos)
-        return -np.linalg.norm(goal_pos - agent_pos)/100.0
+        reward = -np.linalg.norm(goal_pos - agent_pos)/100.0
+        return reward
 
     def reset(self):
         obs = super().reset()
+        if self._bits_actions:
+            self.bits = [False]*self._num_bits
+            self.bit_memory =  0
+            obs['memory'] = [int(x) for x in self.bits]
+        else:
+            obs = obs['image']
         self._current_ep+=1
-        obs = obs['image']
         return obs
 
 
@@ -226,56 +314,6 @@ register(
     id='MiniGrid-FourRoomsMemoryRGB-v0',
     entry_point='gym_minigrid.envs:rgb_env'
 )
-
-
-class FrameStack(Wrapper):
-    r"""Observation wrapper that stacks the observations in a rolling manner.
-    For example, if the number of stacks is 4, then the returned observation contains
-    the most recent 4 observations. For environment 'Pendulum-v0', the original observation
-    is an array with shape [3], so if we stack 4 observations, the processed observation
-    has shape [4, 3].
-    .. note::
-        To be memory efficient, the stacked observations are wrapped by :class:`LazyFrame`.
-    .. note::
-        The observation space must be `Box` type. If one uses `Dict`
-        as observation space, it should apply `FlattenDictWrapper` at first.
-    Example::
-        >>> import gym
-        >>> env = gym.make('PongNoFrameskip-v0')
-        >>> env = FrameStack(env, 4)
-        >>> env.observation_space
-        Box(4, 210, 160, 3)
-    Args:
-        env (Env): environment object
-        num_stack (int): number of stacks
-        lz4_compress (bool): use lz4 to compress the frames internally
-    """
-
-    def __init__(self, env, num_stack, lz4_compress=False):
-        super(FrameStack, self).__init__(env)
-        self.num_stack = num_stack
-
-        self.frames = deque(maxlen=num_stack)
-
-        low = np.repeat(self.observation_space.low, num_stack, axis=-1)
-        high = np.repeat(self.observation_space.high, num_stack, axis=-1)
-        self.observation_space = Box(
-            low=low, high=high, dtype=self.observation_space.dtype
-        )
-
-    def _get_observation(self):
-        assert len(self.frames) == self.num_stack, (len(self.frames), self.num_stack)
-        return np.concatenate(list(self.frames),-1)
-
-    def step(self, action):
-        observation, reward, done, info = self.env.step(action)
-        self.frames.append(observation)
-        return self._get_observation(), reward, done, info
-
-    def reset(self, **kwargs):
-        observation = self.env.reset(**kwargs)
-        [self.frames.append(observation) for _ in range(self.num_stack)]
-        return self._get_observation()
 
 def frame_stack_env():
     env = FourRoomsMemoryEnv()
